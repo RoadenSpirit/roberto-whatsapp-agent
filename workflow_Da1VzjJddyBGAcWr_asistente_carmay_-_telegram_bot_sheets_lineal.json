@@ -1,0 +1,262 @@
+{
+  "id": "Da1VzjJddyBGAcWr",
+  "name": "Asistente AI - Telegram Bot (Sheets Lineal)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "id": "telegram-trigger-node",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        304
+      ],
+      "webhookId": "yourbrand-bot-webhook-id",
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID_1",
+          "name": "YOUR_TELEGRAM_BOT_API_1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.message.from.id }}",
+              "rightValue": 1605235991,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              },
+              "id": "condition-1779821953269-6oz18lwph"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-security-node",
+      "name": "Filtro Zero-Trust",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        208,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Telegram Trigger').item.json.message.text }}",
+        "options": {
+          "systemMessage": "={{ `Eres el asistente interno exclusivo para los empleados de Your Brand.\nTu funci\u00f3n es ayudar a tus compa\u00f1eros de trabajo proporcion\u00e1ndoles informaci\u00f3n r\u00e1pida y precisa sobre el inventario, productos y m\u00e9tricas de ventas. Tu tono debe ser profesional, directo y de apoyo corporativo.\nIMPORTANTE: NO eres un vendedor hablando con un cliente, no intentes \"cerrar ventas\". Est\u00e1s hablando con otros miembros del equipo.\n\nREGLA ABSOLUTA: Para responder CUALQUIER mensaje, DEBES EJECUTAR PRIMERO UNA DE LAS HERRAMIENTAS que tienes conectadas. NO uses tu memoria para inventar datos.\n- Si preguntan por disponibilidad, stock o precios de un producto -> Usa 'buscar_inventario'.\n- Si preguntan por m\u00e9tricas de ventas, clientes que compraron, o ventas de un d\u00eda -> Usa 'buscar_ventas_diarias'.\nSiempre p\u00e1sale como 'query' las palabras clave. Todos los precios que muestres deben ser en CUP.\n\nCONTEXTO TEMPORAL CR\u00cdTICO (\u00dasalo para calcular fechas):\n- La fecha de hoy es: ${ $now.format('yyyy-MM-dd') } (D\u00eda de la semana: ${ $now.format('cccc') }).\n- Si el usuario te pregunta por las ventas de 'hoy', 'ayer', 'antier' o rangos similares, calcula mentalmente la fecha absoluta correspondiente en formato YYYY-MM-DD bas\u00e1ndote en la fecha de hoy, y usa EXCLUSIVAMENTE esa fecha calculada como el argumento 'query' de la herramienta 'buscar_ventas_diarias'.\n  * Ejemplo 1: Si hoy es 2026-05-21 y te piden ventas de 'hoy', pasa query: '2026-05-21'.\n  * Ejemplo 2: Si hoy es 2026-05-21 y te piden ventas de 'ayer', pasa query: '2026-05-20'.\n  * Ejemplo 3: Si te piden las ventas del lunes, calcula qu\u00e9 fecha YYYY-MM-DD fue el lunes m\u00e1s cercano y \u00fasala como query.` }}"
+        }
+      },
+      "id": "ai-agent-node",
+      "name": "Agente de IA (Gemini)",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.6,
+      "position": [
+        528,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "options": {},
+        "modelName": "models/gemini-2.5-flash"
+      },
+      "id": "groq-model-node",
+      "name": "Google Gemini",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        336,
+        592
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YOUR_GEMINI_CREDENTIAL_ID",
+          "name": "YOUR_GEMINI_API_ACCOUNT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Telegram Trigger').item.json.message.from.id }}",
+        "tableName": "historial_chat_bot"
+      },
+      "id": "postgres-memory-node",
+      "name": "Postgres Chat Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1,
+      "position": [
+        560,
+        576
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "YOUR_POSTGRES_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "={{ $json.output.replace(/^\\*\\s+/gm, \"\u2022 \").replace(/^#+\\s+/gm, \"\") }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "telegram-output-node",
+      "name": "Telegram Output",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1280,
+        304
+      ],
+      "webhookId": "a8b70037-d215-4c8c-bd8b-993746383329",
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID_1",
+          "name": "YOUR_TELEGRAM_BOT_API_1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "buscar_inventario",
+        "description": "Busca el stock, disponibilidad, precios y tallas de un producto en el inventario. Argumento de busqueda requerido: 'query' (string, el nombre o modelo del producto a buscar).",
+        "workflowId": "IC4wXZ3a5FqkrBAh"
+      },
+      "id": "d4e15916-ec07-45f7-bb8d-c1e419aa0e1a",
+      "name": "Herramienta: Buscar Inventario",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 1,
+      "position": [
+        960,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "name": "buscar_ventas_diarias",
+        "description": "Busca informacion sobre ventas diarias, compras de clientes especificos, o transacciones historicas. Argumento de busqueda requerido: 'query' (string, ej: nombre del cliente, fecha, o producto vendido).",
+        "workflowId": "FaaxAYHHfhkB6veq"
+      },
+      "id": "5e06f803-af65-43e1-854b-5cac0b67f3de",
+      "name": "Herramienta: Buscar Ventas Diarias",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 1,
+      "position": [
+        784,
+        576
+      ]
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Filtro Zero-Trust",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente de IA (Gemini)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Agente de IA (Gemini)",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agente de IA (Gemini)": {
+      "main": [
+        [
+          {
+            "node": "Telegram Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtro Zero-Trust": {
+      "main": [
+        [
+          {
+            "node": "Agente de IA (Gemini)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Herramienta: Buscar Inventario": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente de IA (Gemini)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Herramienta: Buscar Ventas Diarias": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente de IA (Gemini)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "binaryMode": "separate",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  }
+}

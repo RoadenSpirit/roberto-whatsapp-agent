@@ -1,0 +1,171 @@
+{
+  "id": "ypgDcdzMJNfiF92L",
+  "name": "ROBERTO",
+  "active": true,
+  "nodes": [
+    {
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID_2",
+          "name": "YOUR_TELEGRAM_BOT_API_2"
+        }
+      },
+      "id": "telegram-trigger-node",
+      "name": "Telegram Trigger",
+      "parameters": {
+        "additionalFields": {},
+        "updates": [
+          "message"
+        ]
+      },
+      "position": [
+        0,
+        304
+      ],
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1,
+      "webhookId": "vps-ia-bot-webhook-id"
+    },
+    {
+      "id": "if-security-node",
+      "name": "Filtro Zero-Trust",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.message.from.id }}",
+              "operator": {
+                "operation": "equals",
+                "type": "number"
+              },
+              "rightValue": 1605235991
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        208,
+        304
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3
+    },
+    {
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "YOUR_SSH_CREDENTIAL_ID",
+          "name": "YOUR_SSH_CONNECTION"
+        }
+      },
+      "id": "execute-command-node",
+      "name": "Ejecutar Antigravity CLI",
+      "parameters": {
+        "authentication": "privateKey",
+        "command": "=N8N_WORKFLOW_ID='{{ $workflow.id }}' N8N_WORKFLOW_NAME='{{ $workflow.name }}' python3 /home/your-vps-user/telegram_bot_handler.py '{{ $json.message.from.id }}' '{{ $json.message.text.replace(/'/g, \"'\\\\''\") }}'"
+      },
+      "position": [
+        400,
+        300
+      ],
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1
+    },
+    {
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID_2",
+          "name": "YOUR_TELEGRAM_BOT_API_2"
+        }
+      },
+      "id": "telegram-output-node",
+      "name": "Telegram Output",
+      "parameters": {
+        "additionalFields": {
+          "parse_mode": "HTML"
+        },
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "={{ $json.stdout_clean }}"
+      },
+      "position": [
+        800,
+        300
+      ],
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "webhookId": "e4520307-a66b-47f4-aa2a-c0c0c443f74b"
+    },
+    {
+      "id": "cleanup-code-node",
+      "name": "Limpiar Respuesta",
+      "parameters": {
+        "jsCode": "// 1. Obtener el stdout de SSH que contiene el JSONL del transcript\nconst logContent = $input.item.json.stdout || '';\n\n// Dividir por l\u00edneas y recorrer en reversa\nconst lines = logContent.trim().split('\\n').reverse();\n\nlet lastResponse = '';\nfor (const line of lines) {\n  try {\n    const data = JSON.parse(line);\n    if (data.source === 'MODEL' && data.type === 'PLANNER_RESPONSE' && data.content && data.content.trim()) {\n      lastResponse = data.content;\n      break;\n    }\n  } catch (e) {\n    // Ignorar l\u00edneas vac\u00edas o corruptas\n  }\n}\n\nif (!lastResponse) {\n  return [{\n    json: {\n      stdout_clean: \"No se encontr\u00f3 respuesta en la sesi\u00f3n activa.\"\n    }\n  }];\n}\n\n// 2. Funci\u00f3n para convertir Markdown al subconjunto HTML de Telegram de forma segura\nfunction markdownToHtml(text) {\n  // Preprocesar elementos HTML no soportados por Telegram\n  let processedText = text;\n\n  // 1. Convertir listas ordenadas <ol> y desordenadas <ul> de manera robusta\n  processedText = processedText.replace(/<ol[^>]*>([\\s\\S]*?)<\\/ol>/gi, (match, listContent) => {\n    let index = 1;\n    return listContent.replace(/<li[^>]*>([\\s\\S]*?)<\\/li>\\s*\\n?/gi, (liMatch, itemContent) => {\n      return `${index++}. ${itemContent.trim()}\\n`;\n    });\n  });\n\n  processedText = processedText.replace(/<ul[^>]*>([\\s\\S]*?)<\\/ul>/gi, (match, listContent) => {\n    return listContent.replace(/<li[^>]*>([\\s\\S]*?)<\\/li>\\s*\\n?/gi, (liMatch, itemContent) => {\n      return `\u2022 ${itemContent.trim()}\\n`;\n    });\n  });\n\n  // Fallback para <li> hu\u00e9rfanos\n  processedText = processedText.replace(/<li[^>]*>([\\s\\S]*?)<\\/li>\\s*\\n?/gi, (match, itemContent) => {\n    return `\u2022 ${itemContent.trim()}\\n`;\n  });\n\n  // Limpiar tags de listas residuales\n  processedText = processedText\n    .replace(/<\\/?ul>/gi, '')\n    .replace(/<\\/?ol>/gi, '');\n\n  // 2. Convertir otros tags HTML comunes no soportados por Telegram\n  processedText = processedText\n    .replace(/<h[1-6][^>]*>([\\s\\S]*?)<\\/h[1-6]>/gi, '<b>$1</b>\\n')\n    .replace(/<p[^>]*>([\\s\\S]*?)<\\/p>\\s*\\n?/gi, '$1\\n\\n')\n    .replace(/<div[^>]*>([\\s\\S]*?)<\\/div>\\s*\\n?/gi, '$1\\n')\n    .replace(/<br\\s*\\/?>/gi, '\\n');\n\n  // 3. Placeholderize valid Telegram HTML tags\n  const placeholders = [];\n  let placeholderCounter = 0;\n  \n  const validTagRegex = /<\\/?(?:b|strong|i|em|u|ins|s|strike|del|code|pre|tg-spoiler)(?:\\s+[^>]*)*>|<\\/?span(?:\\s+class=[\"']tg-spoiler[\"'])?\\s*>|<\\/?a(?:\\s+href=[\"'][^\"']*[\"'])?\\s*>/gi;\n  \n  processedText = processedText.replace(validTagRegex, (match) => {\n    const placeholder = `___VALID_TAG_PLACEHOLDER_${placeholderCounter}___`;\n    placeholders.push({ placeholder, original: match });\n    placeholderCounter++;\n    return placeholder;\n  });\n\n  // 2. Escape remaining HTML characters to protect against invalid tags breaking Telegram parser\n  processedText = processedText\n    .replace(/&/g, '&amp;')\n    .replace(/</g, '&lt;')\n    .replace(/>/g, '&gt;');\n\n  // 3. Restore valid HTML tags\n  for (const p of placeholders) {\n    processedText = processedText.replace(p.placeholder, p.original);\n  }\n\n  // 4. Convert Markdown to HTML\n  // Convertir bloques de c\u00f3digo: ```js [codigo] ``` -> <pre><code>$1</code></pre>\n  processedText = processedText.replace(/```(?:[a-zA-Z0-9_+#-]+)?\\n([\\s\\S]*?)\\n```/g, '<pre><code>$1</code></pre>');\n\n  // Convertir c\u00f3digo en l\u00ednea: `codigo` -> <code>codigo</code>\n  processedText = processedText.replace(/`([^`\\n]+)`/g, '<code>$1</code>');\n\n  // Convertir negritas: **texto** -> <b>texto</b>\n  processedText = processedText.replace(/\\*\\*([^*]+)\\*\\*/g, '<b>$1</b>');\n  processedText = processedText.replace(/__([^_]+)__/g, '<b>$1</b>');\n\n  // Convertir it\u00e1licas: *texto* -> <i>texto</i> o _texto_ -> <i>texto</i>\n  processedText = processedText.replace(/\\*([^*]+)\\*/g, '<i>$1</i>');\n  processedText = processedText.replace(/\\b_([^_]+)_\\b/g, '<i>$1</i>');\n\n  // Convertir enlaces Markdown: [texto](url) -> <a href=\"url\">texto</a>\n  processedText = processedText.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '<a href=\"$2\">$1</a>');\n\n  // Convertir encabezados: ### texto -> <b>texto</b>\n  processedText = processedText.replace(/^(?:#{1,6})\\s+(.+)$/gm, '<b>$1</b>');\n\n  return processedText;\n}\n\n// 3. Funci\u00f3n para segmentar el texto limpiamente por saltos de l\u00ednea o espacios\nfunction chunkString(str, limit) {\n  const chunks = [];\n  let index = 0;\n  while (index < str.length) {\n    if (str.length - index <= limit) {\n      chunks.push(str.substring(index));\n      break;\n    }\n    let cutPos = str.lastIndexOf('\\n', index + limit);\n    if (cutPos <= index) {\n      cutPos = str.lastIndexOf(' ', index + limit);\n    }\n    if (cutPos <= index) {\n      cutPos = index + limit;\n    }\n    chunks.push(str.substring(index, cutPos));\n    index = cutPos + 1;\n  }\n  return chunks;\n}\n\n// Segmentar sobre el texto markdown original\nconst CHAR_LIMIT = 4000;\nconst chunks = chunkString(lastResponse, CHAR_LIMIT);\n\n// Convertir a HTML cada fragmento de forma independiente\nreturn chunks.map(chunk => ({\n  json: {\n    stdout_clean: markdownToHtml(chunk.trim())\n  }\n}));"
+      },
+      "position": [
+        600,
+        300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    }
+  ],
+  "connections": {
+    "Ejecutar Antigravity CLI": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Limpiar Respuesta",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Filtro Zero-Trust": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Ejecutar Antigravity CLI",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Limpiar Respuesta": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Telegram Output",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Filtro Zero-Trust",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "binaryMode": "separate"
+  }
+}

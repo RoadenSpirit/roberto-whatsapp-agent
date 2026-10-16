@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "n8n-expert": {
+      "source": "midudev/autoskills",
+      "sourceType": "autoskills-registry",
+      "computedHash": "7a63c5efbdb3877d8d7882f76f637365b3a39f6e33749415f39204faf6b3fc98"
+    }
+  }
+}

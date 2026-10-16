@@ -1,0 +1,177 @@
+{
+  "id": "Q5iI4KQ5PzWL3Bax",
+  "name": "ROBERTO: WhatsApp",
+  "active": true,
+  "nodes": [
+    {
+      "id": "webhook-trigger-node",
+      "name": "Webhook",
+      "parameters": {
+        "httpMethod": "POST",
+        "options": {},
+        "path": "roberto-whatsapp-webhook"
+      },
+      "position": [
+        0,
+        300
+      ],
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "webhookId": "511799d5-48d0-4ec2-a3be-6ba4cc3dd3cd"
+    },
+    {
+      "id": "security-filter-node",
+      "name": "Filtro de Seguridad",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.headers['x-api-key'] }}",
+              "operator": {
+                "operation": "equals",
+                "type": "string"
+              },
+              "rightValue": "YOUR_WHATSAPP_API_KEY",
+              "id": "condition-1783101712611-6lqlhyfqu"
+            },
+            {
+              "leftValue": "={{ ['YOUR_WHATSAPP_JID_1', 'YOUR_JID_1', 'YOUR_JID_2', 'YOUR_PHONE_2@s.whatsapp.net'].includes($json.body.chatId) || $json.body.chatId.startsWith('YOUR_PHONE_1') || $json.body.chatId.startsWith('YOUR_PHONE_2') }}",
+              "operator": {
+                "operation": "equals",
+                "type": "boolean"
+              },
+              "rightValue": true,
+              "id": "condition-1783101712611-az3ypc91b"
+            }
+          ],
+          "options": {
+            "version": 3,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          }
+        }
+      }
+    },
+    {
+      "id": "ssh-execution-node",
+      "name": "Ejecutar Antigravity CLI",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "authentication": "privateKey",
+        "command": "=N8N_WORKFLOW_ID='{{ $workflow.id }}' N8N_WORKFLOW_NAME='{{ $workflow.name }}' python3 /home/your-vps-user/whatsapp_bot_handler.py '{{ $('Webhook').item.json.body.chatId }}' '{{ $('Webhook').item.json.body.message.replace(/'/g, \"\\'\\\\\\'\\'\") }}' '{{ $('Webhook').item.json.body.imagePath || \"\" }}'"
+      },
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "YOUR_SSH_CREDENTIAL_ID",
+          "name": "YOUR_SSH_CONNECTION"
+        }
+      }
+    },
+    {
+      "id": "cleanup-code-node",
+      "name": "Limpiar Respuesta WhatsApp",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// 1. Obtener el stdout de SSH que contiene el JSONL del transcript\nconst logContent = $input.item.json.stdout || '';\n\n// Dividir por l\u00edneas y recorrer en reversa\nconst lines = logContent.trim().split('\\n').reverse();\n\nlet lastResponse = '';\nfor (const line of lines) {\n  try {\n    const data = JSON.parse(line);\n    if (data.source === 'MODEL' && data.type === 'PLANNER_RESPONSE' && data.content && data.content.trim()) {\n      lastResponse = data.content;\n      break;\n    }\n  } catch (e) {\n    // Ignorar\n  }\n}\n\nif (!lastResponse) {\n  return [{\n    json: {\n      stdout_clean: \"No se encontr\u00f3 respuesta en la sesi\u00f3n activa.\"\n    }\n  }];\n}\n\n// 2. Convertir Markdown a formato nativo de WhatsApp\nfunction markdownToWhatsApp(text) {\n  let processedText = text;\n\n  // A. Convertir listas HTML que pudieran venir del modelo\n  processedText = processedText.replace(/<ol[^>]*>([\\s\\S]*?)<\\/ol>/gi, (match, listContent) => {\n    let index = 1;\n    return listContent.replace(/<li[^>]*>([\\s\\S]*?)<\\/li>\\s*\\n?/gi, (liMatch, itemContent) => {\n      return `${index++}. ${itemContent.trim()}\\n`;\n    });\n  });\n\n  processedText = processedText.replace(/<ul[^>]*>([\\s\\S]*?)<\\/ul>/gi, (match, listContent) => {\n    return listContent.replace(/<li[^>]*>([\\s\\S]*?)<\\/li>\\s*\\n?/gi, (liMatch, itemContent) => {\n      return `- ${itemContent.trim()}\\n`;\n    });\n  });\n\n  processedText = processedText.replace(/<li[^>]*>([\\s\\S]*?)<\\/li>\\s*\\n?/gi, (match, itemContent) => {\n    return `- ${itemContent.trim()}\\n`;\n  });\n\n  // B. Limpiar tags HTML comunes convirti\u00e9ndolos a texto plano de WhatsApp\n  processedText = processedText\n    .replace(/<\\/?(?:b|strong)>/gi, '*')\n    .replace(/<\\/?(?:i|em)>/gi, '_')\n    .replace(/<\\/?code>/gi, '`')\n    .replace(/<\\/?pre[^>]*>/gi, '```')\n    .replace(/<h[1-6][^>]*>([\\s\\S]*?)<\\/h[1-6]>/gi, '*$1*\\n')\n    .replace(/<p[^>]*>([\\s\\S]*?)<\\/p>\\s*\\n?/gi, '$1\\n\\n')\n    .replace(/<div[^>]*>([\\s\\S]*?)<\\/div>\\s*\\n?/gi, '$1\\n')\n    .replace(/<br\\s*\\/?>/gi, '\\n')\n    .replace(/&amp;/g, '&')\n    .replace(/&lt;/g, '<')\n    .replace(/&gt;/g, '>');\n\n  // C. Eliminar cualquier otro tag HTML residual\n  processedText = processedText.replace(/<[^>]*>/g, '');\n\n  // D. Convertir Markdown a Marcado de WhatsApp\n  processedText = processedText.replace(/```(?:[a-zA-Z0-9_+#-]+)?\\n([\\s\\S]*?)\\n```/g, '```\\n$1\\n```');\n  \n  // Convertir negritas a temporal\n  processedText = processedText.replace(/\\*\\*([^*]+)\\*\\*/g, '\u2983B\u2984$1\u2983/B\u2984');\n  processedText = processedText.replace(/__([^_]+)__/g, '\u2983B\u2984$1\u2983/B\u2984');\n\n  // Convertir it\u00e1licas (asterisco simple) a guion bajo\n  processedText = processedText.replace(/\\*([^*]+)\\*/g, '_$1_');\n\n  // Restaurar negritas temporales a asterisco de WhatsApp\n  processedText = processedText.replace(/\u2983B\u2984/g, '*').replace(/\u2983\\/B\u2984/g, '*');\n\n  processedText = processedText.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '$1 ($2)');\n  processedText = processedText.replace(/^(?:#{1,6})\\s+(.+)$/gm, '*$1*');\n\n  return processedText.trim();\n}\n\nfunction chunkString(str, limit) {\n  const chunks = [];\n  let index = 0;\n  while (index < str.length) {\n    if (str.length - index <= limit) {\n      chunks.push(str.substring(index));\n      break;\n    }\n    let cutPos = str.lastIndexOf('\\n', index + limit);\n    if (cutPos <= index) {\n      cutPos = str.lastIndexOf(' ', index + limit);\n    }\n    if (cutPos <= index) {\n      cutPos = index + limit;\n    }\n    chunks.push(str.substring(index, cutPos));\n    index = cutPos + 1;\n  }\n  return chunks;\n}\n\nconst CHAR_LIMIT = 4000;\nconst chunks = chunkString(lastResponse, CHAR_LIMIT);\n\nreturn chunks.map(chunk => ({\n  json: {\n    stdout_clean: markdownToWhatsApp(chunk)\n  }\n}));"
+      }
+    },
+    {
+      "id": "whatsapp-output-node",
+      "name": "Enviar Mensaje WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "options": {},
+        "sendBody": true,
+        "sendHeaders": true,
+        "specifyBody": "json",
+        "url": "http://YOUR_WHATSAPP_HOST/send",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "YOUR_WHATSAPP_API_KEY"
+            }
+          ]
+        },
+        "jsonBody": "={{ JSON.stringify({ chatId: $('Webhook').item.json.body.chatId, message: $json.stdout_clean }) }}"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Filtro de Seguridad",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtro de Seguridad": {
+      "main": [
+        [
+          {
+            "node": "Ejecutar Antigravity CLI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ejecutar Antigravity CLI": {
+      "main": [
+        [
+          {
+            "node": "Limpiar Respuesta WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limpiar Respuesta WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Enviar Mensaje WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  }
+}
