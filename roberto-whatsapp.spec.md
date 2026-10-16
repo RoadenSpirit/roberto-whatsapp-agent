@@ -47,5 +47,5 @@ id PinvgLcB0x4Slx4o, creada 2026-10-16).
 - CA3 ✓ (misma rama que CA2: mensaje vacío sin imagen → 0 items).
 - CA4 ✓ ejecución 82490: número desconocido → Anti-ruido pasa, IF rama false, fin sin SSH ni envío.
 - CA5 ✓ `n8n_validate_workflow`: 0 errores, 0 warnings (6 nodos, 5 conexiones válidas).
-- CA1 pendiente: requiere mensaje real desde número permitido.
+- CA1 ✓ ejecución 82504 (2026-10-16): mensaje real "Hola Roberto" → respuesta del modelo vía freellmapi/auto en 19.5 s, enviada por /send (sent). Tras fixes: reset mapping sesión + modelo freellmapi/auto.
 - CA6 en curso: git init + commit.
