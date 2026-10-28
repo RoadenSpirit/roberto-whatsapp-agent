@@ -8,7 +8,7 @@ por WhatsApp inventario, precios/stock, ventas diarias y conocimiento general,
 con respuestas rápidas, con memoria de conversación y sin exponer el servidor.
 
 ## 2. Usuarios
-- **Números permitidos (2)**: `YOUR_PHONE_1`, `YOUR_PHONE_2` (y sus variantes `@s.whatsapp.net` / `@lid`).
+- **Números permitidos (2)**: `5359XXXX99`, `5355XXXX62` (y sus variantes `@s.whatsapp.net` / `@lid`).
   Sin distinción de roles: todo número permitido recibe el mismo tratamiento.
   Funcionalidad de roles Admin/Empleados: DEPRECADA (decisión 2026-10-15).
 - **No permitidos / ruido**: estados (`status@broadcast`), mensajes vacíos, chatIds desconocidos
