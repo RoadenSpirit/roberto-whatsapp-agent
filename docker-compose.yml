@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  roberto-n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: roberto-n8n
+    restart: unless-stopped
+    ports:
+      - "${PORT_N8N:-5678}:5678"
+    environment:
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - GENERIC_TIMEZONE=America/Havana
+      - TZ=America/Havana
+    volumes:
+      - roberto_n8n_data:/home/node/.n8n
+
+volumes:
+  roberto_n8n_data:
